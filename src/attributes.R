@@ -3,7 +3,7 @@ source('const/glob.R')
 #Attributes -------
 
 #severity generating function
-severity_sim <- function() rpois(1,l_severity)
+severity_sim <- function() runif(1,min=1.1,max=l_severity)
 #Generates age, deprivation and exit thetas based on asd_means and asd_varcov
 age_sim  <- function() MASS::mvrnorm(n=1,mu=adp_means,Sigma=adp_varcov)['age']
 deprivation_sim  <- function() MASS::mvrnorm(n=1,mu=adp_means,Sigma=adp_varcov)['deprivation']
@@ -28,8 +28,10 @@ pat_patience <- function(){
   #get attributes
   attr_severity <- simmer::get_attribute(sim,'severity')
   attr_pat <- simmer::get_attribute(sim,'patience')
+  #This is absolutely moronic. But take it as is for now.
+  attr_pat <- abs((attr_pat * 2)-4)
   
-  patience_val <- rpois(1,cent_pat) - (attr_severity/exp(attr_pat))
+  patience_val <- cent_pat * rbeta(n=1,shape1=attr_severity,shape2 = attr_pat)
   
   return(patience_val)
 }

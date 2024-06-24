@@ -34,7 +34,7 @@ waitlist <- expand.grid('time' = 1:sim_time,'replication'=1:rep_n) |>
   group_by(replication) |> 
   mutate(stops_cumu = cumsum(end),
          starts_cumu = cumsum(start),
-         waitlist = starts_cumu - stops_cumu)
+         waitlist = starts_cumu - lag(stops_cumu))
 
 waitlist_summary <- expand.grid('time' = 1:sim_time,'replication'=1:rep_n) |> 
   left_join(starts,by=c('time','replication')) |> 
@@ -43,7 +43,7 @@ waitlist_summary <- expand.grid('time' = 1:sim_time,'replication'=1:rep_n) |>
   group_by(replication) |> 
   mutate(stops_cumu = cumsum(end),
          starts_cumu = cumsum(start),
-         waitlist = starts_cumu - stops_cumu) |> 
+         waitlist = starts_cumu - lag(stops_cumu)) |> 
   group_by(time) |> 
   summarise(waitlist = mean(waitlist,na.rm=T))
 

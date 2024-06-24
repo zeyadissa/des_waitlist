@@ -99,6 +99,7 @@ sims <- parallel::mclapply(1:rep_n, function(i) {
                           #get attributes
                           attr_severity <- simmer::get_attribute(sim,'severity')
                           attr_pat <- simmer::get_attribute(sim,'patience')
+                          #Patience equation. Needs more thought...
                           patience_val <- rpois(1,cent_pat) - (attr_severity/exp(attr_pat))
                           return(patience_val)},
                       #Dropoff trajectory. Patient just says byeeee

@@ -3,9 +3,10 @@
 #Probability of male
 p_sex <- 0.5
 #lambda for rpois
-l_severity <- 10
-#Central patience: adjust for median wait
-cent_pat <- 35
+l_severity <- 2
+#Central patience: adjust for median wait: a higher value results in longer waits.
+#Suggest max = 1, min = 0.1
+cent_pat <- 0.7
 
 # Random matrix of n x n ; this needs to be populated with
 # Actual values from HES, but currently unable to do so...
@@ -25,11 +26,11 @@ adp_means <- c(35,0,0)
 warmup <- 52
 sim_time <- 52 + warmup
 #Number of patients simulated per week
-pat_n <- 10
+pat_n <- 25
 #number of simulations
 rep_n <- 50
 
 #TEST METRICS: DO NOT TOUCH. REMOVE LATER
-gp_cap <- 15
+gp_cap <- 30
 op_cap <- 10
-acute_cap <- 2
+acute_cap <- 5
