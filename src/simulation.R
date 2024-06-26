@@ -9,7 +9,7 @@ source('src/trajectories.R')
 # Outputs -----
 
 attributes <- simmer.plot::get_mon_attributes(sims)
-arrivals <- simmer.plot::get_mon_arrivals(sims)
+arrivals <- simmer.plot::get_mon_arrivals(sims,ongoing=T)
 resources <- simmer.plot::get_mon_resources(sims)
 arrivals_per_resource <- simmer::get_mon_arrivals(sims,per_resource=T)
 
@@ -72,6 +72,28 @@ flow_times <- arrivals |>
   mutate(time = round(end_time)) |> 
   group_by(replication,time) |> 
   summarise(flow = mean(flow,na.rm=T))
+
+# Dropoffs -------
+
+dropoffs <- attributes |> 
+  dplyr::filter(key == 'dropoff_flag') |> 
+  group_by(replication) |> 
+  summarise(dropoffs = sum(value,na.rm=T)) |> 
+  left_join(attributes |> dplyr::filter(key == 'sex') |> group_by(replication) |> tally(),
+            by='replication') |>  
+  mutate(dropoff_percent = dropoffs/n)
+
+# Unfinished arrivals -----
+
+unfinished <- arrivals |> 
+  group_by(replication,finished) |> 
+  tally() |> 
+  left_join(arrivals |> 
+              group_by(replication) |> 
+              tally() |> 
+              rename('tot'=n),
+            by='replication') |> 
+  mutate(ratio = n/tot)
 
 #Warning: slow to run. I'm sure there's a faster way. Someone tell me how.
 # df_waits <- lapply(

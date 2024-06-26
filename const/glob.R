@@ -3,10 +3,10 @@
 #Probability of male
 p_sex <- 0.5
 #lambda for rpois
-l_severity <- 2
+l_severity <- 4
 #Central patience: adjust for median wait: a higher value results in longer waits.
-#Suggest max = 1, min = 0.1
-cent_pat <- 0.7
+#Suggest max = 100, min = 18
+cent_pat <- 100
 
 # Random matrix of n x n ; this needs to be populated with
 # Actual values from HES, but currently unable to do so...
@@ -26,11 +26,20 @@ adp_means <- c(35,0,0)
 warmup <- 52
 sim_time <- 52 + warmup
 #Number of patients simulated per week
-pat_n <- 25
+pat_n <- 200
 #number of simulations
 rep_n <- 50
 
-#TEST METRICS: DO NOT TOUCH. REMOVE LATER
-gp_cap <- 30
-op_cap <- 10
-acute_cap <- 5
+gp_prop <- 1.1
+op_prop <- 1.1
+acute_prop <- 0.3
+
+#CAPACITY METRICS: DO NOT TOUCH. REMOVE LATER
+gp_cap <- simmer::schedule(1:sim_time, 1.0015^(1:sim_time)*gp_prop*pat_n, period=sim_time)
+
+op_cap <- simmer::schedule(1:sim_time, 1.002^(1:sim_time)*op_prop*pat_n, period=sim_time)
+bed_cap <- simmer::schedule(1:sim_time, 0.9995^(1:sim_time)*acute_prop*pat_n, period=sim_time)
+acute_nurse_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*acute_prop*pat_n, period=sim_time)
+acute_doctor_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*acute_prop*pat_n, period=sim_time)
+
+thf<-'#dd0031'

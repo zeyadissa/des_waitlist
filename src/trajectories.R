@@ -49,22 +49,25 @@ non_admit_trajectory <- simmer::trajectory() |>
 admit_trajectory <- simmer::trajectory() |> 
   simmer::log_('Patient given DECISION TO ADMIT') |>
   simmer::set_attribute('admit_flag',1) |> 
-  simmer::timeout(1) |> 
   simmer::log_('Patient ADMITTED') |>
-  simmer::seize('acute_capacity',1) |> 
+  simmer::seize('bed',1) |> 
+  simmer::seize('acute_nurse',1) |> 
+  simmer::seize('acute_doctor',1) |> 
   #length of stay: average should be less than 1 (most are DC)
   simmer::timeout(los) |> 
   simmer::log_('Patient DISCHARGED') |>
-  simmer::seize('acute_capacity',1)
+  simmer::release('bed',1) |> 
+  simmer::release('acute_nurse',1) |> 
+  simmer::release('acute_doctor',1)
   
-outcome_trajectory <- simmer::trajectory() |> 
+outcome_trajectory <- simmer::trajectory() |>
   simmer::branch(option = admit_probability,
                  continue = c(T,T),
                  #Patient is given DECISION TO ADMIT
                  admit_trajectory,
                  non_admit_trajectory)
 
-unfinished_trajectory <- simmer::trajectory() |> 
+unused_trajectory <- simmer::trajectory() |> 
   simmer::log_('Patient UNFINISHED')
 
 # Simulation -----
@@ -96,12 +99,17 @@ sims <- parallel::mclapply(1:rep_n, function(i) {
     simmer::renege_in(t= 
                         #Unhappy with this, but can't figure out a way to get it to work
                         function(){
+                          
                           #get attributes
                           attr_severity <- simmer::get_attribute(sim,'severity')
-                          attr_pat <- simmer::get_attribute(sim,'patience')
-                          #Patience equation. Needs more thought...
-                          patience_val <- rpois(1,cent_pat) - (attr_severity/exp(attr_pat))
-                          return(patience_val)},
+                          #This is absolutely moronic. But take it as is for now.
+                          attr_pat <- abs(simmer::get_attribute(sim,'patience')) |> exp()
+                          
+                          patience_val <- cent_pat * rbeta(n=1,shape1=attr_severity,shape2 = attr_pat)
+                          
+                          return(patience_val)
+                          
+                          },
                       #Dropoff trajectory. Patient just says byeeee
                       out = simmer::trajectory() |> 
                         simmer::log_('Patient DROPPED OFF') |> 
@@ -115,12 +123,14 @@ sims <- parallel::mclapply(1:rep_n, function(i) {
     simmer::join(op_trajectory) |> 
     simmer::timeout(time) |> 
     simmer::join(outcome_trajectory) |> 
-    simmer::handle_unfinished(unfinished_trajectory)
+    simmer::handle_unfinished(unused_trajectory)
   
   sim |>
-    simmer::add_resource("primary_care_capacity", capacity = gp_cap) |>
-    simmer::add_resource("op_capacity", capacity = op_cap) |>
-    simmer::add_resource("acute_capacity", capacity = acute_cap) |>
+    simmer::add_resource("primary_care_capacity", capacity = gp_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)|>
+    simmer::add_resource("op_capacity", capacity = op_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
+    simmer::add_resource("acute_doctor", capacity = acute_doctor_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
+    simmer::add_resource("acute_nurse", capacity = acute_nurse_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
+    simmer::add_resource("bed", capacity = bed_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
     simmer::add_generator("patient", patient, function() rexp(1, pat_n), mon=2) |>
     simmer::run(until=sim_time) |> 
     simmer::wrap()

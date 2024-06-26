@@ -11,7 +11,7 @@ patience_sim  <- function() MASS::mvrnorm(n=1,mu=adp_means,Sigma=adp_varcov)['pa
 
 #gender sim; is it me or this useless for now? no corr, but future implementation
 #for potential split in los / specialty.
-sex_sim <- function() ifelse(runif(1)<0.5,1,0)
+sex_sim <- function() ifelse(runif(1)<p_sex,1,0)
 
 # Priotisation --------
 
@@ -19,21 +19,6 @@ sex_sim <- function() ifelse(runif(1)<0.5,1,0)
 calc_prio <- function() {
   attr_severity <- simmer::get_attribute(sim,'severity')
   return(attr_severity)
-}
-
-# Patience -------
-
-pat_patience <- function(){
-  
-  #get attributes
-  attr_severity <- simmer::get_attribute(sim,'severity')
-  attr_pat <- simmer::get_attribute(sim,'patience')
-  #This is absolutely moronic. But take it as is for now.
-  attr_pat <- abs((attr_pat * 2)-4)
-  
-  patience_val <- cent_pat * rbeta(n=1,shape1=attr_severity,shape2 = attr_pat)
-  
-  return(patience_val)
 }
 
 #Probabilities --------
@@ -44,15 +29,15 @@ referral_probability <- function() ifelse(runif(1) > 0.9, 1, 2)
 treatment_probability <- function() runif(1) > 0.37
 #admission probability. This is 0.40 on avg.
 admit_probability <- function() ifelse(runif(1) < 0.4, 1, 2)
-#average wait times for a finished first is 21w now. needs to change.
-op_wait_times <- function() rnorm(1,21,1)
-#assumed FUP within a month, max
-fup_wait_time <- function() runif(1, min = 1, max = 4)
-#Same for a GP. (What are GP appointment times on avg?)
-gp_wait_time <- function() runif(1, min = 1, max = 4)
-#this is confusing, but inter-arrival times?
-time <- function() runif(1, min = 1, max = 3)
-#waits for non-admit pathway (fups?)
-non_admit_wait_time <- function() rnorm(1,15,1)
-los <- function() runif(1, min = 0.001, max = 0.4)
+#Interarrival times?
+glob_t <- function() rexp(1,1)
+non_admit_wait_time <- glob_t
+time <- glob_t
+los <- glob_t
+gp_wait_time <- glob_t
+fup_wait_time <- glob_t
+op_wait_times <- glob_t
+
+#Arrival schedules
 patient_sim <- function() c(rexp(1, 1), rep(0,(pat_n)-1))
+
