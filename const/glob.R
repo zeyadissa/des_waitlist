@@ -3,10 +3,10 @@
 #Probability of male
 p_sex <- 0.5
 #lambda for rpois
-l_severity <- 6
+l_severity <- 4
 #Central patience: adjust for median wait: a higher value results in longer waits.
-#Suggest max = 100, min = 18
-cent_pat <- 100
+#Suggest max 100, min = 18
+cent_pat <- 30
 
 # Random matrix of n x n ; this needs to be populated with
 # Actual values from HES, but currently unable to do so...
@@ -32,7 +32,7 @@ rep_n <- 50
 
 gp_prop <- 0.9
 op_prop <- 0.9
-acute_prop <- 0.2
+acute_prop <- 0.1
 
 #CAPACITY METRICS: DO NOT TOUCH. REMOVE LATER
 gp_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*gp_prop*pat_n, period=sim_time)

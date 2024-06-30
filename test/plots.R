@@ -30,7 +30,6 @@ plot_flow_dist <- ggplot() +
   theme_bw()+
   theme(text = element_text(size = 16))
 
-
 # Trajectories ----
 
 #Severity distribution
