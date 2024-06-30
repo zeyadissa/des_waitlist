@@ -1,5 +1,8 @@
 source('const/glob.R')
 source('src/attributes.R')
+source('src/functions.R')
+
+#GP Trajectory -----
 
 gp_trajectory <- simmer::trajectory() |> 
   #The underlying assumption here is that everybody who gets an appointment needs to see
@@ -9,7 +12,7 @@ gp_trajectory <- simmer::trajectory() |>
   simmer::seize('primary_care_capacity',1) |> 
   simmer::timeout(gp_wait_time) |> 
   #Probability is weak. Needs to be functionalised.
-  simmer::branch(option = referral_probability,
+  simmer::branch(option = GetRefProb,
                  continue=c(T,T),
                  #GP decides not to refer
                  simmer::trajectory('no_referral') |> 
@@ -25,15 +28,35 @@ gp_trajectory <- simmer::trajectory() |>
                    simmer::log_('Patient REFERRED') |> 
                    simmer::release("primary_care_capacity", 1))
 
+#OP Trajectory -----
+
 op_trajectory <- simmer::trajectory() |> 
   #Time to get an OP appointment (queue)
   #Seize either a nurse or a doctor or both. This needs to be determined by a probability
   # based off of the patient severity, and queue availability.
   simmer::log_('Attending FIRST appointment...',tag='op_branch') |> 
-  simmer::seize('op_capacity',1) |> 
+  simmer::set_attribute('first',1) |> 
+  simmer::set_attribute("arrival_time", function() simmer::now(sim)) |> 
+  #Important to recompute probability
+  simmer::renege_if(
+    "recompute_priority",
+    out = simmer::trajectory() |>
+      # e.g., increase priority if wait_time > 3
+      simmer::set_prioritization(function() {
+        if (simmer::now(sim) - simmer::get_attribute(sim, "arrival_time") > 18)
+          c(1, NA, NA)     # only change the priority
+        else c(NA, NA, NA) # don't change anything
+      }, mod="+")  |>
+      # go 2 steps back to renege_if
+      simmer::rollback(2)) |>
+  simmer::seize('op_capacity',1) |>
+  simmer::renege_abort() |>
+  #OUTCOME could be reached?
+  simmer::log_('Finished FIRST appointment') |> 
   simmer::timeout(op_wait_times) |> 
-  #OUTCOME reached in FIRST appointment
-  simmer::log_('Patient TREATED') |> 
+  # Send signal that resource is being released
+  simmer::send("recompute_priority") |>
+  simmer::timeout(0) |>
   simmer::release('op_capacity',1)
 
 non_admit_trajectory <- simmer::trajectory() |> 
@@ -45,6 +68,8 @@ non_admit_trajectory <- simmer::trajectory() |>
   simmer::release('op_capacity',1) |> 
   #rollback probit depends on a function for it.
   simmer::rollback('non_admit_start',check=treatment_probability)
+
+#Acute Trajectory -----
 
 admit_trajectory <- simmer::trajectory() |> 
   simmer::log_('Patient given DECISION TO ADMIT') |>
@@ -59,9 +84,11 @@ admit_trajectory <- simmer::trajectory() |>
   simmer::release('bed',1) |> 
   simmer::release('acute_nurse',1) |> 
   simmer::release('acute_doctor',1)
-  
+
+#Outcome & Other Trajectory -----
+
 outcome_trajectory <- simmer::trajectory() |>
-  simmer::branch(option = admit_probability,
+  simmer::branch(option = GetAdmitProb,
                  continue = c(T,T),
                  #Patient is given DECISION TO ADMIT
                  admit_trajectory,
@@ -70,70 +97,34 @@ outcome_trajectory <- simmer::trajectory() |>
 unused_trajectory <- simmer::trajectory() |> 
   simmer::log_('Patient UNFINISHED')
 
-# Simulation -----
-
-#Actual simulation
-sims <- parallel::mclapply(1:rep_n, function(i) {
-  
-  sim <- simmer::simmer('sim')
-  
-  patient <- simmer::trajectory() |>
-    #Sets all attributes
-    simmer::set_attribute('sex', sex_sim) |> 
-    simmer::set_attribute('age', age_sim) |> 
-    simmer::set_attribute('deprivation', deprivation_sim) |> 
-    simmer::set_attribute('patience', patience_sim) |> 
-    simmer::set_attribute('severity', severity_sim) |> 
-    #prioritisation
-    simmer::set_prioritization(function() {
-      prio <- simmer::get_prioritization(sim)
-      attr <- simmer::get_attribute(sim,'severity')
-      c(attr, prio[[2]]+1, FALSE)
-    }) |> 
-    #set attributes: these will be determined elsewhere.
-    simmer::set_attribute('fups',0) |> 
-    #Patient arrives
-    simmer::log_('Patient ARRIVING...') |>
-    #Renege at any point if patience is exceeded. Patience is a calculated
-    #variable based off of underlying patient characteristics.
-    simmer::renege_in(t= 
-                        #Unhappy with this, but can't figure out a way to get it to work
-                        function(){
-                          
-                          #get attributes
-                          attr_severity <- simmer::get_attribute(sim,'severity')
-                          #This is absolutely moronic. But take it as is for now.
-                          attr_pat <- abs(simmer::get_attribute(sim,'patience')) |> exp()
-                          
-                          patience_val <- cent_pat * rbeta(n=1,shape1=attr_severity,shape2 = attr_pat)
-                          
-                          return(patience_val)
-                          
-                          },
-                      #Dropoff trajectory. Patient just says byeeee
-                      out = simmer::trajectory() |> 
-                        simmer::log_('Patient DROPPED OFF') |> 
-                        # Set drop-off flag
-                        simmer::set_attribute('dropoff_flag',1)) |> 
-    #Initial GP appointment: this occurs immediately.
-    simmer::join(gp_trajectory) |> 
-    simmer::set_attribute('clock_start', function() {simmer::now(sim)}) |> 
-    simmer::timeout(time) |> 
-    #clock start
-    simmer::join(op_trajectory) |> 
-    simmer::timeout(time) |> 
-    simmer::join(outcome_trajectory) |> 
-    simmer::handle_unfinished(unused_trajectory)
-  
-  sim |>
-    simmer::add_resource("primary_care_capacity", capacity = gp_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)|>
-    simmer::add_resource("op_capacity", capacity = op_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
-    simmer::add_resource("acute_doctor", capacity = acute_doctor_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
-    simmer::add_resource("acute_nurse", capacity = acute_nurse_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
-    simmer::add_resource("bed", capacity = bed_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
-    simmer::add_generator("patient", patient, function() rexp(1, pat_n), mon=2) |>
-    simmer::run(until=sim_time) |> 
-    simmer::wrap()
-  
-})
+# Patient trajectory -----
+patient <- simmer::trajectory() |>
+  #Sets all attributes
+  simmer::set_attribute('sex', sex_sim) |> 
+  simmer::set_attribute('age', age_sim) |> 
+  simmer::set_attribute('deprivation', deprivation_sim) |> 
+  simmer::set_attribute('patience', patience_sim) |> 
+  simmer::set_attribute('severity', severity_sim) |> 
+  #set attributes: these will be determined elsewhere.
+  simmer::set_attribute('fups',0) |> 
+  #Patient arrives
+  simmer::log_('Patient ARRIVING...') |>
+  #Renege at any point if patience is exceeded. Patience is a calculated
+  #variable based off of underlying patient characteristics.
+  simmer::renege_in(t= GetPat,
+                    #Dropoff trajectory. Patient just says byeeee
+                    out = simmer::trajectory() |> 
+                      simmer::log_('Patient DROPPED OFF') |> 
+                      # Set drop-off flag
+                      simmer::set_attribute('dropoff_flag',1)) |> 
+  #Initial GP appointment: this occurs immediately.
+  simmer::join(gp_trajectory) |> 
+  simmer::set_attribute('clock_start', function() {simmer::now(sim)}) |> 
+  simmer::timeout(time) |> 
+  #clock start
+  simmer::join(op_trajectory) |> 
+  simmer::timeout(time) |> 
+  simmer::join(outcome_trajectory) |> 
+  simmer::handle_unfinished(unused_trajectory) |> 
+  simmer::set_attribute('priority', function() {simmer::get_prioritization(sim)[[1]]} )
 

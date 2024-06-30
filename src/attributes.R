@@ -13,22 +13,12 @@ patience_sim  <- function() MASS::mvrnorm(n=1,mu=adp_means,Sigma=adp_varcov)['pa
 #for potential split in los / specialty.
 sex_sim <- function() ifelse(runif(1)<p_sex,1,0)
 
-# Priotisation --------
-
-#Very basic scenario where priotisation is based off severity
-calc_prio <- function() {
-  attr_severity <- simmer::get_attribute(sim,'severity')
-  return(attr_severity)
-}
-
 #Probabilities --------
 
 #probability of being referred (we assume it's 0.9 here)
 referral_probability <- function() ifelse(runif(1) > 0.9, 1, 2)
 #probability of getting treated at first fup
 treatment_probability <- function() runif(1) > 0.37
-#admission probability. This is 0.40 on avg.
-admit_probability <- function() ifelse(runif(1) < 0.4, 1, 2)
 #Interarrival times?
 glob_t <- function() rexp(1,1)
 non_admit_wait_time <- glob_t
@@ -40,4 +30,3 @@ op_wait_times <- glob_t
 
 #Arrival schedules
 patient_sim <- function() c(rexp(1, 1), rep(0,(pat_n)-1))
-

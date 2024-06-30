@@ -1,116 +1,84 @@
-#Dependencies -----
-
-#clear environment
-rm(list=ls())
-
-#trajectories
+source('const/glob.R')
+source('src/attributes.R')
 source('src/trajectories.R')
 
-# Outputs -----
+# Simulation: parallel -----
 
-attributes <- simmer.plot::get_mon_attributes(sims)
-arrivals <- simmer.plot::get_mon_arrivals(sims,ongoing=T)
-resources <- simmer.plot::get_mon_resources(sims)
-arrivals_per_resource <- simmer::get_mon_arrivals(sims,per_resource=T)
+# #Actual simulation
+# sims <- parallel::mclapply(1:rep_n, function(i) {
+#   
+#   sim <- simmer::simmer('sim')
+#   
+#   patient <- simmer::trajectory() |>
+#     #Sets all attributes
+#     simmer::set_attribute('sex', sex_sim) |> 
+#     simmer::set_attribute('age', age_sim) |> 
+#     simmer::set_attribute('deprivation', deprivation_sim) |> 
+#     simmer::set_attribute('patience', patience_sim) |> 
+#     simmer::set_attribute('severity', severity_sim) |> 
+#     #prioritisation
+#     simmer::set_prioritization(function() {
+#       prio <- simmer::get_prioritization(sim)
+#       attr <- simmer::get_attribute(sim,'severity')
+#       c(attr, prio[[2]]+1, FALSE)
+#     }) |> 
+#     #set attributes: these will be determined elsewhere.
+#     simmer::set_attribute('fups',0) |> 
+#     #Patient arrives
+#     simmer::log_('Patient ARRIVING...') |>
+#     #Renege at any point if patience is exceeded. Patience is a calculated
+#     #variable based off of underlying patient characteristics.
+#     simmer::renege_in(t= 
+#                         #Unhappy with this, but can't figure out a way to get it to work
+#                         function(){
+#                           
+#                           #get attributes
+#                           attr_severity <- simmer::get_attribute(sim,'severity')
+#                           #This is absolutely moronic. But take it as is for now.
+#                           attr_pat <- abs(simmer::get_attribute(sim,'patience')) |> exp()
+#                           
+#                           patience_val <- cent_pat * rbeta(n=1,shape1=attr_severity,shape2 = attr_pat)
+#                           
+#                           return(patience_val)
+#                           
+#                           },
+#                       #Dropoff trajectory. Patient just says byeeee
+#                       out = simmer::trajectory() |> 
+#                         simmer::log_('Patient DROPPED OFF') |> 
+#                         # Set drop-off flag
+#                         simmer::set_attribute('dropoff_flag',1)) |> 
+#     #Initial GP appointment: this occurs immediately.
+#     simmer::join(gp_trajectory) |> 
+#     simmer::set_attribute('clock_start', function() {simmer::now(sim)}) |> 
+#     simmer::timeout(time) |> 
+#     #clock start
+#     simmer::join(op_trajectory) |> 
+#     simmer::timeout(time) |> 
+#     simmer::join(outcome_trajectory) |> 
+#     simmer::handle_unfinished(unused_trajectory)
+#   
+#   sim |>
+#     simmer::add_resource("primary_care_capacity", capacity = gp_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)|>
+#     simmer::add_resource("op_capacity", capacity = op_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
+#     simmer::add_resource("acute_doctor", capacity = acute_doctor_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
+#     simmer::add_resource("acute_nurse", capacity = acute_nurse_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
+#     simmer::add_resource("bed", capacity = bed_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
+#     simmer::add_generator("patient", patient, function() rexp(1, pat_n), mon=2) |>
+#     simmer::run(until=sim_time) |> 
+#     simmer::wrap()
+#   
+# })
 
-# Waitlist size -----
+# Simple One -----
 
-starts <- arrivals|>
-  mutate(time = round(start_time)) |> 
-  group_by(time,replication) |>
-  tally() |> 
-  rename('start'=n)
+sim <- simmer::simmer('sim')
 
-stops <- arrivals|>
-  mutate(time = round(end_time)) |> 
-  group_by(time,replication) |>
-  count() |> 
-  rename('end'=n)
-
-waitlist <- expand.grid('time' = 1:sim_time,'replication'=1:rep_n) |> 
-  left_join(starts,by=c('time','replication')) |> 
-  left_join(stops,by=c('time','replication')) %>%
-  replace(is.na(.), 0) |> 
-  group_by(replication) |> 
-  mutate(stops_cumu = cumsum(end),
-         starts_cumu = cumsum(start),
-         waitlist = starts_cumu - lag(stops_cumu))
-
-waitlist_summary <- expand.grid('time' = 1:sim_time,'replication'=1:rep_n) |> 
-  left_join(starts,by=c('time','replication')) |> 
-  left_join(stops,by=c('time','replication')) %>%
-  replace(is.na(.), 0) |> 
-  group_by(replication) |> 
-  mutate(stops_cumu = cumsum(end),
-         starts_cumu = cumsum(start),
-         waitlist = starts_cumu - lag(stops_cumu)) |> 
-  group_by(time) |> 
-  summarise(waitlist = mean(waitlist,na.rm=T))
-
-# Waits
-
-wait_by_resource<-resources %>%
-  dplyr::group_by(resource,replication) |> 
-  dplyr::summarise(active = sum(head(server, -1) * diff(time)),
-            waiting = sum(head(queue, -1) * diff(time))
-  ) |> 
-  dplyr::group_by(resource) |> 
-  dplyr::summarise(waiting = mean(waiting),
-            active = mean(active),
-            ratio = waiting/active)
-
-# Activity time
-
-flow_times_avg <- arrivals |> 
-  mutate(flow = end_time-start_time) |> 
-  mutate(time = round(end_time)) |> 
-  group_by(time) |> 
-  summarise(flow = mean(flow,na.rm=T))
-
-flow_times <- arrivals |> 
-  mutate(flow = end_time-start_time) |> 
-  mutate(time = round(end_time)) |> 
-  group_by(replication,time) |> 
-  summarise(flow = mean(flow,na.rm=T))
-
-# Dropoffs -------
-
-dropoffs <- attributes |> 
-  dplyr::filter(key == 'dropoff_flag') |> 
-  group_by(replication) |> 
-  summarise(dropoffs = sum(value,na.rm=T)) |> 
-  left_join(attributes |> dplyr::filter(key == 'sex') |> group_by(replication) |> tally(),
-            by='replication') |>  
-  mutate(dropoff_percent = dropoffs/n)
-
-# Unfinished arrivals -----
-
-unfinished <- arrivals |> 
-  group_by(replication,finished) |> 
-  tally() |> 
-  left_join(arrivals |> 
-              group_by(replication) |> 
-              tally() |> 
-              rename('tot'=n),
-            by='replication') |> 
-  mutate(ratio = n/tot)
-
-#Warning: slow to run. I'm sure there's a faster way. Someone tell me how.
-# df_waits <- lapply(
-#   1:sim_time,
-#   function(x){
-#     df <- clocks |>
-#       dplyr::mutate(
-#         wait = case_when(
-#           x < clock_start ~ NA,
-#           x >= clock_start & x <= clock_stop ~ x - clock_start,
-#           x > clock_stop ~ NA)) |>
-#       dplyr::select(replication,name,wait) |>
-#       tidyr::drop_na() |>
-#       dplyr::mutate(t = x)
-#   }
-# ) |>
-#   data.table::rbindlist() |>
-#   dplyr::group_by(replication,t) |>
-#   dplyr::summarise(wait_time = mean(wait,na.rm=T))
-# 
+sims <- sim |>
+  simmer::add_resource("primary_care_capacity", capacity = gp_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)|>
+  simmer::add_resource("op_capacity", capacity = op_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
+  simmer::add_resource("acute_doctor", capacity = acute_doctor_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
+  simmer::add_resource("acute_nurse", capacity = acute_nurse_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
+  simmer::add_resource("bed", capacity = bed_cap, queue_size=Inf, queue_size_strict=T, preemptive=TRUE)  |>
+  simmer::add_generator("patient", patient, function() rexp(1, pat_n), mon=2) |>
+  simmer::run(until=sim_time) |> 
+  invisible()

@@ -3,7 +3,7 @@
 #Probability of male
 p_sex <- 0.5
 #lambda for rpois
-l_severity <- 4
+l_severity <- 6
 #Central patience: adjust for median wait: a higher value results in longer waits.
 #Suggest max = 100, min = 18
 cent_pat <- 100
@@ -24,21 +24,21 @@ adp_means <- c(35,0,0)
 
 #Simulation time in weeks (1yr)
 warmup <- 52
-sim_time <- 52 + warmup
+sim_time <- 0 + warmup
 #Number of patients simulated per week
-pat_n <- 200
+pat_n <- 100
 #number of simulations
 rep_n <- 50
 
-gp_prop <- 1.1
-op_prop <- 1.1
-acute_prop <- 0.3
+gp_prop <- 0.9
+op_prop <- 0.9
+acute_prop <- 0.2
 
 #CAPACITY METRICS: DO NOT TOUCH. REMOVE LATER
-gp_cap <- simmer::schedule(1:sim_time, 1.0015^(1:sim_time)*gp_prop*pat_n, period=sim_time)
+gp_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*gp_prop*pat_n, period=sim_time)
 
-op_cap <- simmer::schedule(1:sim_time, 1.002^(1:sim_time)*op_prop*pat_n, period=sim_time)
-bed_cap <- simmer::schedule(1:sim_time, 0.9995^(1:sim_time)*acute_prop*pat_n, period=sim_time)
+op_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*op_prop*pat_n, period=sim_time)
+bed_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*acute_prop*pat_n, period=sim_time)
 acute_nurse_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*acute_prop*pat_n, period=sim_time)
 acute_doctor_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*acute_prop*pat_n, period=sim_time)
 
