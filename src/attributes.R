@@ -5,9 +5,14 @@ source('const/glob.R')
 #severity generating function
 severity_sim <- function() runif(1,min=1.1,max=l_severity)
 #Generates age, deprivation and exit thetas based on asd_means and asd_varcov
-age_sim  <- function() MASS::mvrnorm(n=1,mu=adp_means,Sigma=adp_varcov)['age']
-deprivation_sim  <- function() MASS::mvrnorm(n=1,mu=adp_means,Sigma=adp_varcov)['deprivation']
+# age_sim  <- function() MASS::mvrnorm(n=1,mu=adp_means,Sigma=adp_varcov)['age']
+# deprivation_sim  <- function() MASS::mvrnorm(n=1,mu=adp_means,Sigma=adp_varcov)['deprivation']
 patience_sim  <- function() MASS::mvrnorm(n=1,mu=adp_means,Sigma=adp_varcov)['patience']
+
+#This are temporary for now just to see what it actually looks like. 
+age_sim <- function() rnorm(1,mean=35,sd=20) |> abs()
+deprivation_sim <- function() runif(1,min=0,max=1)
+
 
 #gender sim; is it me or this useless for now? no corr, but future implementation
 #for potential split in los / specialty.
@@ -20,7 +25,6 @@ referral_probability <- function() ifelse(runif(1) > 0.9, 1, 2)
 #probability of getting treated at first fup
 treatment_probability <- function() runif(1) > 0.37
 #Interarrival times?
-glob_t <- function() rexp(1,1)
 non_admit_wait_time <- glob_t
 time <- glob_t
 los <- glob_t

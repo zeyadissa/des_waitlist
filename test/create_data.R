@@ -61,20 +61,10 @@ wait_by_resource<-resources |>
 
 # Activity time
 
-flow_dist <- arrivals |> 
-  dplyr::mutate(flow = end_time-start_time) |> 
-  dplyr::mutate(time = round(end_time)) 
-
 flow_times_avg <- arrivals |> 
   dplyr::mutate(flow = end_time-start_time) |> 
   dplyr::mutate(time = round(end_time)) |> 
   dplyr::group_by(time) |> 
-  dplyr::summarise(flow = mean(flow,na.rm=T))
-
-flow_times <- arrivals |> 
-  dplyr::mutate(flow = end_time-start_time) |> 
-  dplyr::mutate(time = round(end_time)) |> 
-  dplyr::group_by(replication,time) |> 
   dplyr::summarise(flow = mean(flow,na.rm=T))
 
 # Dropoffs -------
@@ -83,10 +73,32 @@ dropoffs <- attributes |>
   dplyr::filter(key == 'dropoff_flag') |> 
   dplyr::group_by(replication) |> 
   dplyr::summarise(dropoffs = sum(value,na.rm=T)) |> 
-  dplyr::left_join(attributes |> dplyr::filter(key == 'sex') |> group_by(replication) |> tally(),
+  dplyr::left_join(attributes |> 
+                     dplyr::filter(key == 'sex') |> 
+                     group_by(replication) |> 
+                     tally(),
             by='replication') |>  
   dplyr::mutate(dropoff_percent = dropoffs/n)
 
+dropped_off_patients <- (dropoffs <- attributes |> 
+  dplyr::filter(key == 'dropoff_flag') |> 
+  dplyr::filter(value == 1))$name |> unique()
+
+tot_arr <- arrivals |> 
+  mutate(time = round(activity_time)) |> 
+  group_by(time) |> 
+  tally(name='tot')
+
+dropoff_times <- arrivals |> 
+  filter(name %in% dropped_off_patients) |> 
+  mutate(time = round(activity_time)) |> 
+  group_by(time) |> 
+  tally()
+
+patience_data <- attributes |> 
+  dplyr::filter(key == 'patience')
+
+  
 # Unfinished arrivals -----
 
 unfinished <- arrivals |> 
@@ -99,31 +111,55 @@ unfinished <- arrivals |>
             by='replication') |> 
   dplyr::mutate(ratio = n/tot)
 
-#Other trajectory diagnostics -------
+# Waitlist / Queue -----
 
-traj_diag <- attributes |> 
+referred_patients <- (attributes |> 
+                        filter(key == 'referral_flag') |> 
+                        filter(value == 1))$name |>  unique()
+
+queue <- arrivals |> 
+  dplyr::filter(finished == F &
+                  name %in% referred_patients) |> 
+  dplyr::mutate(flow_time = sim_time - start_time,
+                flow = round(flow_time)) |> 
+  group_by(flow) |> 
+  tally()
+
+#Severity -------
+
+severity <- attributes |> 
   dplyr::select(!c(time,replication)) |> 
   dplyr::ungroup() |> 
-  dplyr::filter(key != 'fups') |> 
-  tidyr::pivot_wider(names_from='key',values_from='value') 
-
-traj_diag[is.na(traj_diag)] <- 0
+  dplyr::filter(key %in% c('severity'))
 
 # Dropoffs, referrals and admissions -----
 
 traj_diag_dra <- attributes |> 
   dplyr::select(!c(time,replication)) |> 
   dplyr::ungroup() |> 
-  dplyr::filter(key %in% c('dropoff_flag','admit_flag','referral_flag')) |> 
+  dplyr::filter(key %in% c('dropoff_flag','admit_flag','referral_flag','treatment_decision_flag')) |> 
   dplyr::group_by(key) |> 
-  dplyr::summarise(ratio=sum(value,na.rm=T)/length(unique(attributes$name)))
+  dplyr::summarise(ratio=sum(value,na.rm=T)/length(unique(attributes$name))) |> 
+  dplyr::arrange(desc(ratio))
 
 # Priorities -----
 
 priorities <- attributes |> 
-  dplyr::select(!c(time,replication)) |> 
+  dplyr::select(!c(replication)) |> 
   dplyr::ungroup() |> 
-  dplyr::filter(key %in% c('priority'))
+  dplyr::filter(key %in% c('priority')) |>
+  group_by(name) |> 
+  tidyr::pivot_wider(names_from='key',values_from='value') |> 
+  left_join(attributes |>   
+              dplyr::filter(key %in% c('arrival_time','severity')) |> 
+              select(key,value,name) |> 
+              pivot_wider(names_from='key',values_from='value'),
+            by='name') |> 
+  mutate(flow=time-arrival_time)
+
+# Priorities -----
+age_plot <- attributes |> 
+  filter(key == 'age')
 
 # Fups ------
 

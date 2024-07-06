@@ -3,9 +3,9 @@ GetPat <- function(){
   #get attributes
   attr_severity <- simmer::get_attribute(sim,'severity')
   #This is absolutely moronic. But take it as is for now.
-  attr_pat <- abs(simmer::get_attribute(sim,'patience')) |> exp()
+  attr_pat <- abs(simmer::get_attribute(sim,'private_prop')) |> exp()
   
-  patience_val <- cent_pat * rbeta(n=1,shape1=attr_severity,shape2 = attr_pat)
+  patience_val <- cent_pat * rbeta(n=1,shape1=attr_severity,shape2 = attr_pat) + 1
   
   return(patience_val)}
 
@@ -39,6 +39,10 @@ GetRefProb <- function(){
   
 }
 
-GetPriority <- function(){
+GetFirstDiagProb <- function(){
+  
+  diagpro <- ifelse(runif(1) >= 0.4,1,2)
+  
+  return(diagpro)
   
 }

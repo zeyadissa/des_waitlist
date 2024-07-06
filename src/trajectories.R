@@ -13,7 +13,7 @@ gp_trajectory <- simmer::trajectory() |>
   simmer::timeout(gp_wait_time) |> 
   #Probability is weak. Needs to be functionalised.
   simmer::branch(option = GetRefProb,
-                 continue=c(T,T),
+                 continue=c(F,T),
                  #GP decides not to refer
                  simmer::trajectory('no_referral') |> 
                    #Referral decision made
@@ -37,16 +37,20 @@ op_trajectory <- simmer::trajectory() |>
   simmer::log_('Attending FIRST appointment...',tag='op_branch') |> 
   simmer::set_attribute('first',1) |> 
   simmer::set_attribute("arrival_time", function() simmer::now(sim)) |> 
+  simmer::set_prioritization(
+    function(){
+      c(simmer::get_attribute(sim,'severity'),NA,NA)
+    },
+    mod = '+'
+  ) |> 
   #Important to recompute probability
   simmer::renege_if(
     "recompute_priority",
     out = simmer::trajectory() |>
       # e.g., increase priority if wait_time > 3
       simmer::set_prioritization(function() {
-        if (simmer::now(sim) - simmer::get_attribute(sim, "arrival_time") > 18)
-          c(1, NA, NA)     # only change the priority
-        else c(NA, NA, NA) # don't change anything
-      }, mod="+")  |>
+          c(simmer::get_attribute(sim, "severity") + (simmer::now(sim) - simmer::get_attribute(sim, "arrival_time")), NA, NA)
+            })  |>
       # go 2 steps back to renege_if
       simmer::rollback(2)) |>
   simmer::seize('op_capacity',1) |>
@@ -57,7 +61,26 @@ op_trajectory <- simmer::trajectory() |>
   # Send signal that resource is being released
   simmer::send("recompute_priority") |>
   simmer::timeout(0) |>
-  simmer::release('op_capacity',1)
+  simmer::release('op_capacity',1) |> 
+  simmer::timeout(op_wait_times) |> 
+  #Probability of needing x fups for diagnostic. How do you determine this...?
+  simmer::branch(option = GetFirstDiagProb,
+                 continue=c(T,T),
+                 #GP decides not to refer
+                 simmer::trajectory('diag_initial') |> 
+                   #Referral decision made
+                   simmer::log_('Patient receives TREATMENT DECISION'),
+                 #GP decides to refer
+                 simmer::trajectory() |> 
+                   #Referral decision made
+                   simmer::log_('Patient attends FUP',tag="diag_fups") |> 
+                   simmer::seize('op_capacity',1) |>
+                   simmer::log_('Patient receives TREATMENT DECISION') |> 
+                   simmer::set_attribute('fups',1,mod='+') |> 
+                   simmer::release("op_capacity", 1) |> 
+                   simmer::rollback('diag_fups',check=treatment_probability)) |> 
+  simmer::set_attribute('treatment_decision_flag',1)
+
 
 non_admit_trajectory <- simmer::trajectory() |> 
   simmer::log_(tag = 'non_admit_start', 'Patient awaiting OUTCOME...') |> 
@@ -75,15 +98,11 @@ admit_trajectory <- simmer::trajectory() |>
   simmer::log_('Patient given DECISION TO ADMIT') |>
   simmer::set_attribute('admit_flag',1) |> 
   simmer::log_('Patient ADMITTED') |>
-  simmer::seize('bed',1) |> 
-  simmer::seize('acute_nurse',1) |> 
-  simmer::seize('acute_doctor',1) |> 
+  simmer::seize('acute_capacity',1) |> 
   #length of stay: average should be less than 1 (most are DC)
   simmer::timeout(los) |> 
   simmer::log_('Patient DISCHARGED') |>
-  simmer::release('bed',1) |> 
-  simmer::release('acute_nurse',1) |> 
-  simmer::release('acute_doctor',1)
+  simmer::release('acute_capacity',1) 
 
 #Outcome & Other Trajectory -----
 
@@ -98,13 +117,15 @@ unused_trajectory <- simmer::trajectory() |>
   simmer::log_('Patient UNFINISHED')
 
 # Patient trajectory -----
+
 patient <- simmer::trajectory() |>
   #Sets all attributes
   simmer::set_attribute('sex', sex_sim) |> 
   simmer::set_attribute('age', age_sim) |> 
   simmer::set_attribute('deprivation', deprivation_sim) |> 
-  simmer::set_attribute('patience', patience_sim) |> 
+  simmer::set_attribute('private_prop', patience_sim) |> 
   simmer::set_attribute('severity', severity_sim) |> 
+  simmer::set_attribute('patience',GetPat) |> 
   #set attributes: these will be determined elsewhere.
   simmer::set_attribute('fups',0) |> 
   #Patient arrives

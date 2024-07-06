@@ -17,29 +17,29 @@ adp_varcov <- t(A) %*% A
 colnames(adp_varcov) <- c('age','deprivation','patience')
 rownames(adp_varcov) <- c('age','deprivation','patience')
 
+#waits
+glob_t <- function() rexp(1,1)
+
 #means, again need to be realistic
-adp_means <- c(35,0,0)
+adp_means <- c(1,1,1)
 
 # Global -----
 
 #Simulation time in weeks (1yr)
 warmup <- 52
-sim_time <- 0 + warmup
+sim_time <- 104 + warmup
 #Number of patients simulated per week
-pat_n <- 100
+pat_n <- 50
 #number of simulations
-rep_n <- 50
+rep_n <- 1
 
-gp_prop <- 0.9
-op_prop <- 0.9
-acute_prop <- 0.1
+gp_prop <- 1.3
+op_prop <- 1
+acute_prop <- 0.2
 
 #CAPACITY METRICS: DO NOT TOUCH. REMOVE LATER
 gp_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*gp_prop*pat_n, period=sim_time)
-
 op_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*op_prop*pat_n, period=sim_time)
-bed_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*acute_prop*pat_n, period=sim_time)
-acute_nurse_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*acute_prop*pat_n, period=sim_time)
-acute_doctor_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*acute_prop*pat_n, period=sim_time)
+acute_cap <- simmer::schedule(1:sim_time, 1^(1:sim_time)*acute_prop*pat_n, period=sim_time)
 
 thf<-'#dd0031'
